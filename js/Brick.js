@@ -1,13 +1,22 @@
 export class Brick {
-  constructor(x, y, width, height, type = "normal", hp = 1) {
+  constructor(
+    x,
+    y,
+    width,
+    height,
+    type = "normal",
+    hp = 1
+  ) {
     this.x = x;
     this.y = y;
     this.width = width;
     this.height = height;
 
     this.type = type;
+
     this.hp = hp;
     this.maxHp = hp;
+
     this.destroyed = false;
   }
 
@@ -23,15 +32,23 @@ export class Brick {
   }
 
   getColor() {
-    if (this.type === "bomb") return "#ef4444";
-    if (this.type === "power") return "#22c55e";
+    if (this.type === "bomb") {
+      return "#ef4444";
+    }
+
+    if (this.type === "power") {
+      return "#22c55e";
+    }
 
     const colors = {
       1: "#38bdf8",
-      2: "#a78bfa",
-      3: "#fb923c"
+      2: "#8b5cf6",
+      3: "#f97316"
     };
 
-    return colors[this.hp] || "#fff";
+    return (
+      colors[this.hp] ||
+      "#ffffff"
+    );
   }
 }

@@ -13,36 +13,102 @@ const restartButton = document.getElementById("restart");
 
 const message = document.getElementById("message");
 
-if (!canvas) {
-  throw new Error("Canvas #game을 찾을 수 없습니다.");
+function showError(error) {
+  console.error(error);
+
+  if (message) {
+    message.textContent =
+      "❌ 오류: " +
+      (error?.message || error);
+    message.style.color = "#ef4444";
+  }
+
+  alert(
+    "게임 오류가 발생했습니다.\n\n" +
+    (error?.message || error)
+  );
 }
 
-canvas.width = CONFIG.canvas.width;
-canvas.height = CONFIG.canvas.height;
+try {
+  if (!canvas) {
+    throw new Error(
+      "Canvas #game을 찾을 수 없습니다."
+    );
+  }
 
-const ui = {
-  score,
-  lives,
-  level,
-  message
-};
+  canvas.width = CONFIG.canvas.width;
+  canvas.height = CONFIG.canvas.height;
 
-const game = new Game(canvas, ui);
+  const ui = {
+    score,
+    lives,
+    level,
+    message
+  };
 
-// 시작
-startButton?.addEventListener("click", () => {
-  game.start();
-});
+  const game = new Game(canvas, ui);
 
-// 일시정지
-pauseButton?.addEventListener("click", () => {
-  game.togglePause();
-});
+  startButton?.addEventListener(
+    "click",
+    () => {
+      try {
+        console.log("START 버튼 클릭");
 
-// 재시작
-restartButton?.addEventListener("click", () => {
-  game.restart();
-});
+        game.start();
 
-// 초기 화면
-game.draw();
+        console.log(
+          "game.start() 실행 완료"
+        );
+      } catch (error) {
+        showError(error);
+      }
+    }
+  );
+
+  pauseButton?.addEventListener(
+    "click",
+    () => {
+      try {
+        game.togglePause();
+      } catch (error) {
+        showError(error);
+      }
+    }
+  );
+
+  restartButton?.addEventListener(
+    "click",
+    () => {
+      try {
+        game.restart();
+      } catch (error) {
+        showError(error);
+      }
+    }
+  );
+
+  game.draw();
+
+} catch (error) {
+  showError(error);
+}
+
+window.addEventListener(
+  "error",
+  event => {
+    showError(
+      event.error ||
+      new Error(event.message)
+    );
+  }
+);
+
+window.addEventListener(
+  "unhandledrejection",
+  event => {
+    showError(
+      event.reason ||
+      new Error("알 수 없는 Promise 오류")
+    );
+  }
+);

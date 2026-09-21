@@ -1,4 +1,3 @@
-```js
 export const CONFIG = {
   canvas: {
     width: 900,
@@ -51,4 +50,3 @@ export const CONFIG = {
     countdown: 3
   }
 };
-```

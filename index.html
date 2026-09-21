@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>벽돌깨기</title>
+
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+
+<body>
+
+  <main class="game-container">
+
+    <header class="game-header">
+      <h1>🧱 벽돌깨기</h1>
+
+      <div class="game-info">
+        <div>
+          점수
+          <strong id="score">0</strong>
+        </div>
+
+        <div>
+          목숨
+          <strong id="lives">3</strong>
+        </div>
+
+        <div>
+          스테이지
+          <strong id="level">1</strong>
+        </div>
+      </div>
+    </header>
+
+
+    <section class="game-area">
+
+      <canvas
+        id="game"
+        width="900"
+        height="500"
+        aria-label="벽돌깨기 게임 화면"
+      ></canvas>
+
+    </section>
+
+
+    <section class="controls">
+
+      <button
+        type="button"
+        id="start"
+      >
+        ▶ 시작
+      </button>
+
+      <button
+        type="button"
+        id="pause"
+      >
+        ⏸ 일시정지
+      </button>
+
+      <button
+        type="button"
+        id="restart"
+      >
+        ↻ 재시작
+      </button>
+
+    </section>
+
+
+    <p
+      id="message"
+      class="message"
+      aria-live="polite"
+    >
+      시작 버튼을 눌러 출발!
+    </p>
+
+
+    <p class="help">
+      ← → / A D : 패들 이동 ·
+      마우스/터치 : 패들 이동
+    </p>
+
+  </main>
+
+
+  <!--
+    중요:
+    type="module"을 사용해야
+    main.js에서 import/export 가능
+  -->
+  <script
+    type="module"
+    src="./js/main.js"
+  ></script>
+
+</body>
+  </html>

@@ -1,0 +1,308 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0b1020;
+  --panel: #111827;
+  --panel-light: #1f2937;
+  --border: #374151;
+  --text: #f9fafb;
+  --muted: #9ca3af;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+}
+
+body {
+  min-height: 100vh;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  padding: 24px;
+
+  background:
+    radial-gradient(
+      circle at top,
+      #1e1b4b 0%,
+      var(--bg) 45%,
+      #050816 100%
+    );
+
+  color: var(--text);
+
+  font-family:
+    Arial,
+    "Noto Sans KR",
+    sans-serif;
+}
+
+
+/* =========================
+   게임 전체
+========================= */
+
+.game-container {
+  width: min(940px, 100%);
+
+  padding: 24px;
+
+  background: rgba(17, 24, 39, 0.92);
+
+  border: 1px solid var(--border);
+  border-radius: 20px;
+
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+
+/* =========================
+   헤더
+========================= */
+
+.game-header {
+  margin-bottom: 16px;
+}
+
+.game-header h1 {
+  margin-bottom: 16px;
+
+  text-align: center;
+
+  font-size: clamp(26px, 5vw, 38px);
+  font-weight: 800;
+
+  letter-spacing: -1px;
+}
+
+
+/* =========================
+   점수판
+========================= */
+
+.game-info {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 10px;
+}
+
+.game-info div {
+  padding: 12px;
+
+  background: var(--panel-light);
+
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  text-align: center;
+
+  color: var(--muted);
+
+  font-size: 14px;
+}
+
+.game-info strong {
+  display: block;
+
+  margin-top: 3px;
+
+  color: var(--text);
+
+  font-size: 21px;
+}
+
+
+/* =========================
+   게임 화면
+========================= */
+
+.game-area {
+  width: 100%;
+
+  padding: 8px;
+
+  background: #070b14;
+
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+#game {
+  display: block;
+
+  width: 100%;
+  height: auto;
+
+  aspect-ratio: 900 / 500;
+
+  background: #101827;
+
+  border-radius: 8px;
+
+  touch-action: none;
+}
+
+
+/* =========================
+   버튼
+========================= */
+
+.controls {
+  display: flex;
+
+  justify-content: center;
+
+  flex-wrap: wrap;
+
+  gap: 10px;
+
+  margin-top: 16px;
+}
+
+.controls button {
+  min-width: 120px;
+  min-height: 44px;
+
+  padding: 10px 18px;
+
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  background: var(--panel-light);
+
+  color: var(--text);
+
+  font-size: 15px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease,
+    border-color 0.15s ease;
+}
+
+.controls button:hover {
+  background: #374151;
+
+  border-color: #4b5563;
+}
+
+.controls button:active {
+  transform: scale(0.96);
+}
+
+.controls button:focus-visible {
+  outline: 3px solid var(--accent-hover);
+  outline-offset: 2px;
+}
+
+
+/* 시작 버튼 */
+
+#start {
+  background: var(--accent);
+
+  border-color: var(--accent);
+}
+
+#start:hover {
+  background: var(--accent-hover);
+
+  border-color: var(--accent-hover);
+}
+
+
+/* =========================
+   메시지
+========================= */
+
+.message {
+  min-height: 24px;
+
+  margin-top: 14px;
+
+  text-align: center;
+
+  color: #c7d2fe;
+
+  font-size: 15px;
+  font-weight: 600;
+}
+
+
+/* =========================
+   조작 안내
+========================= */
+
+.help {
+  margin-top: 6px;
+
+  text-align: center;
+
+  color: var(--muted);
+
+  font-size: 13px;
+}
+
+
+/* =========================
+   모바일
+========================= */
+
+@media (max-width: 600px) {
+  body {
+    padding: 10px;
+  }
+
+  .game-container {
+    padding: 14px;
+
+    border-radius: 14px;
+  }
+
+  .game-info {
+    gap: 6px;
+  }
+
+  .game-info div {
+    padding: 9px 4px;
+
+    font-size: 12px;
+  }
+
+  .game-info strong {
+    font-size: 18px;
+  }
+
+  .controls {
+    gap: 7px;
+  }
+
+  .controls button {
+    flex: 1;
+
+    min-width: 0;
+
+    padding: 10px 8px;
+  }
+}
+
+
+/* =========================
+   모션 감소 설정
+========================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .controls button {
+    transition: none;
+  }
+}

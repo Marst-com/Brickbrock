@@ -1004,13 +1004,17 @@ start() {
   // GAME LOOP
   // =========================
 
-  loop(timestamp = 0) {
-    this.update();
-    this.draw();
 
-    requestAnimationFrame(
-      time =>
-        this.loop(time)
-    );
+loop(timestamp = 0) {
+  if (!this.running) {
+    this.draw();
+    return;
   }
+
+  this.update();
+  this.draw();
+
+  requestAnimationFrame(
+    time => this.loop(time)
+  );
 }

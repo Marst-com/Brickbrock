@@ -1,3 +1,4 @@
+```js
 export const CONFIG = {
   canvas: {
     width: 900,
@@ -13,7 +14,11 @@ export const CONFIG = {
 
   ball: {
     radius: 8,
-    speed: 5,
+
+    // 1스테이지는 여유롭게
+    speed: 4,
+
+    // 최대 속도
     maxSpeed: 9
   },
 
@@ -24,6 +29,10 @@ export const CONFIG = {
     height: 24,
     gap: 7,
     top: 55,
+
+    // 아이템 드롭 확률
+    dropRate: 0.45,
+
     hpColors: {
       1: "#38bdf8",
       2: "#a78bfa",
@@ -36,5 +45,10 @@ export const CONFIG = {
     speed: 3
   },
 
-  lives: 3
+  lives: 3,
+
+  respawn: {
+    countdown: 3
+  }
 };
+```

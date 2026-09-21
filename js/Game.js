@@ -2,68 +2,93 @@ import { CONFIG } from "./config.js";
 import { Ball } from "./Ball.js";
 import { Paddle } from "./Paddle.js";
 import { Brick } from "./Brick.js";
-import { Input } from "./Input.js";
+import { PowerUp } from "./PowerUp.js";
+import { Particle } from "./Particle.js";
 import { Renderer } from "./Renderer.js";
+import { Input } from "./Input.js";
 
 export class Game {
   constructor(canvas, ui) {
     this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
 
     this.ui = ui;
 
-    this.ball = new Ball();
-    this.paddle = new Paddle();
+    this.renderer = new Renderer(this.ctx);
+    this.input = new Input(canvas);
 
-    this.renderer = new Renderer(canvas);
+    this.paddle = new Paddle(
+      CONFIG.canvas.width,
+      CONFIG.paddle.width,
+      CONFIG.paddle.height,
+      CONFIG.paddle.speed
+    );
 
-    this.input =
-      new Input(canvas, this.paddle);
+    this.balls = [];
+
+    this.bricks = [];
+    this.powerUps = [];
+    this.particles = [];
 
     this.score = 0;
-    this.lives = CONFIG.game.lives;
+    this.lives = CONFIG.lives;
     this.level = 1;
 
     this.running = false;
     this.paused = false;
 
-    this.bricks = [];
-
     this.createLevel();
+    this.updateUI();
   }
 
   createLevel() {
     this.bricks = [];
 
     const {
-      columns,
       rows,
+      cols,
       width,
       height,
       gap,
       top
-    } = CONFIG.bricks;
+    } = CONFIG.brick;
 
     const totalWidth =
-      columns * width +
-      (columns - 1) * gap;
+      cols * width +
+      (cols - 1) * gap;
 
-    const left =
+    const startX =
       (CONFIG.canvas.width - totalWidth) / 2;
 
     for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < columns; col++) {
+      for (let col = 0; col < cols; col++) {
+        const x =
+          startX +
+          col * (width + gap);
 
-        const hp =
-          this.level >= 3 && row < 2
-            ? 2
-            : 1;
+        const y =
+          top +
+          row * (height + gap);
+
+        let type = "normal";
+        let hp = Math.min(row + 1, 3);
+
+        // 폭탄
+        if (
+          row > 0 &&
+          Math.random() < 0.12
+        ) {
+          type = "bomb";
+          hp = 1;
+        }
 
         this.bricks.push(
           new Brick(
-            left + col * (width + gap),
-            top + row * (height + gap),
+            x,
+            y,
             width,
             height,
+            type,
             hp
           )
         );
@@ -72,12 +97,26 @@ export class Game {
   }
 
   start() {
-    if (this.lives <= 0) return;
-
     this.running = true;
     this.paused = false;
 
-    this.ui.message("게임 시작!");
+    this.resetBalls();
+
+    this.ui.message.textContent =
+      "게임 시작!";
+
+    this.loop();
+  }
+
+  resetBalls() {
+    this.balls = [
+      new Ball(
+        CONFIG.canvas.width / 2,
+        430,
+        CONFIG.ball.radius,
+        CONFIG.ball.speed
+      )
+    ];
   }
 
   togglePause() {
@@ -85,182 +124,415 @@ export class Game {
 
     this.paused = !this.paused;
 
-    this.ui.message(
+    this.ui.message.textContent =
       this.paused
-        ? "일시정지"
-        : "게임 진행 중"
-    );
+        ? "⏸ 일시정지"
+        : "▶ 진행 중";
+  }
+
+  restart() {
+    this.score = 0;
+    this.lives = CONFIG.lives;
+    this.level = 1;
+
+    this.powerUps = [];
+    this.particles = [];
+
+    this.paddle.normal();
+
+    this.createLevel();
+    this.resetBalls();
+
+    this.running = false;
+    this.paused = false;
+
+    this.updateUI();
   }
 
   update() {
     if (!this.running || this.paused) return;
 
-    this.paddle.move(
-      this.input.getDirection()
-    );
-
-    this.ball.update();
-
-    this.handleWalls();
-    this.handlePaddle();
-    this.handleBricks();
-    this.handleDeath();
-  }
-
-  handleWalls() {
-    const { width, height } =
-      CONFIG.canvas;
-
-    if (
-      this.ball.x - this.ball.radius <= 0 ||
-      this.ball.x + this.ball.radius >= width
-    ) {
-      this.ball.bounceX();
+    // 패들
+    if (this.input.left) {
+      this.paddle.move(-1);
     }
 
-    if (
-      this.ball.y - this.ball.radius <= 0
-    ) {
-      this.ball.bounceY();
+    if (this.input.right) {
+      this.paddle.move(1);
     }
-  }
 
-  handlePaddle() {
-    const b = this.ball;
-    const p = this.paddle;
-
-    if (
-      b.dy > 0 &&
-      b.y + b.radius >= p.y &&
-      b.y - b.radius <= p.y + p.height &&
-      b.x >= p.x &&
-      b.x <= p.x + p.width
-    ) {
-
-      const hit =
-        (b.x - (p.x + p.width / 2))
-        / (p.width / 2);
-
-      b.dx = hit * 7;
-
-      b.dy = -Math.abs(b.dy);
+    if (this.input.pointerActive) {
+      this.paddle.moveTo(this.input.pointerX);
     }
-  }
 
-  handleBricks() {
-    for (const brick of this.bricks) {
+    // 공
+    for (const ball of this.balls) {
+      ball.update();
 
-      if (!brick.alive) continue;
+      this.handleWalls(ball);
+      this.handlePaddle(ball);
+      this.handleBricks(ball);
+    }
 
-      const hit =
-        this.ball.x + this.ball.radius > brick.x &&
-        this.ball.x - this.ball.radius < brick.x + brick.width &&
-        this.ball.y + this.ball.radius > brick.y &&
-        this.ball.y - this.ball.radius < brick.y + brick.height;
+    // 공 제거
+    this.balls =
+      this.balls.filter(ball => ball.alive);
 
-      if (!hit) continue;
+    if (this.balls.length === 0) {
+      this.loseLife();
+    }
 
-      const destroyed = brick.hit();
+    // 파워업
+    for (const powerUp of this.powerUps) {
+      powerUp.update();
 
-      this.ball.bounceY();
+      if (
+        powerUp.active &&
+        this.collidesPowerUp(powerUp)
+      ) {
+        this.activatePowerUp(powerUp);
+        powerUp.active = false;
+      }
+    }
 
-      this.score += destroyed ? 10 : 3;
+    this.powerUps =
+      this.powerUps.filter(p => p.active);
 
-      this.ui.update(
-        this.score,
-        this.lives,
-        this.level
+    // 파티클
+    for (const particle of this.particles) {
+      particle.update();
+    }
+
+    this.particles =
+      this.particles.filter(
+        p => !p.dead
       );
 
-      break;
-    }
-
+    // 다음 스테이지
     if (
       this.bricks.every(
-        brick => !brick.alive
+        brick => brick.destroyed
       )
     ) {
       this.nextLevel();
     }
+
+    this.updateUI();
   }
 
-  handleDeath() {
+  handleWalls(ball) {
     if (
-      this.ball.y -
-      this.ball.radius <=
-      CONFIG.canvas.height
+      ball.x - ball.radius <= 0 ||
+      ball.x + ball.radius >= CONFIG.canvas.width
     ) {
-      return;
+      ball.bounceX();
     }
 
-    this.lives--;
+    if (ball.y - ball.radius <= 0) {
+      ball.bounceY();
+    }
 
-    this.ui.update(
-      this.score,
-      this.lives,
-      this.level
+    if (
+      ball.y > CONFIG.canvas.height + 30
+    ) {
+      ball.alive = false;
+    }
+  }
+
+  handlePaddle(ball) {
+    const hit =
+      ball.x > this.paddle.x &&
+      ball.x <
+        this.paddle.x + this.paddle.width &&
+      ball.y + ball.radius >= this.paddle.y &&
+      ball.y - ball.radius <=
+        this.paddle.y + this.paddle.height &&
+      ball.dy > 0;
+
+    if (!hit) return;
+
+    const center =
+      this.paddle.x +
+      this.paddle.width / 2;
+
+    const offset =
+      (ball.x - center) /
+      (this.paddle.width / 2);
+
+    ball.dy = -Math.abs(ball.dy);
+    ball.dx = offset * ball.speed;
+  }
+
+  handleBricks(ball) {
+    for (const brick of this.bricks) {
+      if (brick.destroyed) continue;
+
+      const hit =
+        ball.x + ball.radius > brick.x &&
+        ball.x - ball.radius <
+          brick.x + brick.width &&
+        ball.y + ball.radius > brick.y &&
+        ball.y - ball.radius <
+          brick.y + brick.height;
+
+      if (!hit) continue;
+
+      if (!ball.piercing) {
+        ball.bounceY();
+      }
+
+      const destroyed = brick.hit();
+
+      if (destroyed) {
+        this.score += 100;
+
+        this.createParticles(
+          brick.x + brick.width / 2,
+          brick.y + brick.height / 2,
+          brick.getColor()
+        );
+
+        // 폭탄
+        if (brick.type === "bomb") {
+          this.explode(brick);
+        }
+
+        // 25% 확률 파워업
+        if (Math.random() < 0.25) {
+          this.spawnPowerUp(brick);
+        }
+      } else {
+        this.score += 25;
+      }
+
+      break;
+    }
+  }
+
+  explode(source) {
+    for (const brick of this.bricks) {
+      if (brick.destroyed || brick === source) {
+        continue;
+      }
+
+      const dx =
+        brick.x - source.x;
+
+      const dy =
+        brick.y - source.y;
+
+      const distance =
+        Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < 100) {
+        brick.destroyed = true;
+        this.score += 100;
+
+        this.createParticles(
+          brick.x + brick.width / 2,
+          brick.y + brick.height / 2,
+          brick.getColor()
+        );
+      }
+    }
+
+    this.createParticles(
+      source.x + source.width / 2,
+      source.y + source.height / 2,
+      "#ef4444",
+      35
     );
+  }
+
+  spawnPowerUp(brick) {
+    const types = [
+      "duplicate",
+      "expand",
+      "fast",
+      "slow",
+      "life"
+    ];
+
+    const type =
+      types[
+        Math.floor(
+          Math.random() * types.length
+        )
+      ];
+
+    this.powerUps.push(
+      new PowerUp(
+        brick.x + brick.width / 2,
+        brick.y + brick.height / 2,
+        type
+      )
+    );
+  }
+
+  collidesPowerUp(powerUp) {
+    return (
+      powerUp.x >
+        this.paddle.x &&
+      powerUp.x <
+        this.paddle.x +
+          this.paddle.width &&
+      powerUp.y +
+        powerUp.size / 2 >
+        this.paddle.y &&
+      powerUp.y -
+        powerUp.size / 2 <
+        this.paddle.y +
+          this.paddle.height
+    );
+  }
+
+  activatePowerUp(powerUp) {
+    switch (powerUp.type) {
+      case "duplicate":
+        this.duplicateBalls();
+        break;
+
+      case "expand":
+        this.paddle.expand();
+
+        setTimeout(() => {
+          this.paddle.normal();
+        }, 7000);
+
+        break;
+
+      case "fast":
+        for (const ball of this.balls) {
+          ball.setSpeed(1.5);
+        }
+        break;
+
+      case "slow":
+        for (const ball of this.balls) {
+          ball.setSpeed(0.7);
+        }
+        break;
+
+      case "life":
+        this.lives++;
+        break;
+    }
+
+    this.score += 50;
+  }
+
+  duplicateBalls() {
+    const originals = [...this.balls];
+
+    for (const original of originals) {
+      if (this.balls.length >= 5) {
+        break;
+      }
+
+      const clone = new Ball(
+        original.x,
+        original.y,
+        original.radius,
+        original.speed
+      );
+
+      clone.dx = -original.dx;
+      clone.dy = original.dy;
+
+      this.balls.push(clone);
+    }
+  }
+
+  loseLife() {
+    this.lives--;
 
     if (this.lives <= 0) {
       this.running = false;
-      this.ui.message("GAME OVER");
+
+      this.ui.message.textContent =
+        `GAME OVER — 점수 ${this.score}`;
+
       return;
     }
 
-    this.ball.reset(this.level);
+    this.resetBalls();
 
-    this.running = false;
-
-    this.ui.message(
-      "공을 놓쳤어! 다시 시작!"
-    );
+    this.ui.message.textContent =
+      `목숨 감소! 남은 목숨: ${this.lives}`;
   }
 
   nextLevel() {
     this.level++;
 
-    if (
-      this.level >
-      CONFIG.game.maxLevel
-    ) {
-      this.running = false;
-      this.ui.message(
-        "🎉 모든 스테이지 클리어!"
-      );
-      return;
-    }
-
     this.createLevel();
-    this.ball.reset(this.level);
+    this.resetBalls();
 
-    this.running = false;
+    this.score += 500;
 
-    this.ui.update(
-      this.score,
-      this.lives,
-      this.level
-    );
+    this.ui.message.textContent =
+      `🎉 LEVEL ${this.level}`;
+  }
 
-    this.ui.message(
-      `STAGE ${this.level}`
-    );
+  createParticles(
+    x,
+    y,
+    color,
+    amount = 12
+  ) {
+    for (let i = 0; i < amount; i++) {
+      this.particles.push(
+        new Particle(
+          x,
+          y,
+          color
+        )
+      );
+    }
+  }
+
+  updateUI() {
+    this.ui.score.textContent =
+      this.score;
+
+    this.ui.lives.textContent =
+      this.lives;
+
+    this.ui.level.textContent =
+      this.level;
   }
 
   draw() {
-    this.renderer.clear();
-    this.renderer.drawBackground();
+    this.renderer.clear(
+      CONFIG.canvas.width,
+      CONFIG.canvas.height
+    );
+
+    this.renderer.background(
+      CONFIG.canvas.width,
+      CONFIG.canvas.height
+    );
 
     for (const brick of this.bricks) {
-      this.renderer.drawBrick(brick);
+      if (!brick.destroyed) {
+        this.renderer.brick(brick);
+      }
     }
 
-    this.renderer.drawPaddle(
+    for (const powerUp of this.powerUps) {
+      this.renderer.powerUp(powerUp);
+    }
+
+    this.renderer.paddle(
       this.paddle
     );
 
-    this.renderer.drawBall(
-      this.ball
-    );
+    for (const ball of this.balls) {
+      this.renderer.ball(ball);
+    }
+
+    for (const particle of this.particles) {
+      this.renderer.particle(particle);
+    }
   }
 
   loop() {
@@ -271,28 +543,4 @@ export class Game {
       () => this.loop()
     );
   }
-
-  restart() {
-    this.score = 0;
-    this.lives = CONFIG.game.lives;
-    this.level = 1;
-
-    this.running = false;
-    this.paused = false;
-
-    this.paddle.reset();
-    this.ball.reset();
-
-    this.createLevel();
-
-    this.ui.update(
-      this.score,
-      this.lives,
-      this.level
-    );
-
-    this.ui.message(
-      "시작 버튼을 눌러 출발!"
-    );
-  }
-  }
+}

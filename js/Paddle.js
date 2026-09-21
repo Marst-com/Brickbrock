@@ -1,41 +1,48 @@
-import { CONFIG } from "./config.js";
-
 export class Paddle {
-  constructor() {
-    this.width = CONFIG.paddle.width;
-    this.height = CONFIG.paddle.height;
-    this.speed = CONFIG.paddle.speed;
+  constructor(canvasWidth, width, height, speed) {
+    this.canvasWidth = canvasWidth;
+
+    this.normalWidth = width;
+    this.width = width;
+    this.height = height;
+
+    this.speed = speed;
 
     this.reset();
   }
 
   reset() {
-    this.x =
-      (CONFIG.canvas.width - this.width) / 2;
-
-    this.y =
-      CONFIG.canvas.height - 35;
+    this.x = (this.canvasWidth - this.width) / 2;
+    this.y = 465;
   }
 
   move(direction) {
     this.x += direction * this.speed;
 
-    this.x = Math.max(
-      0,
-      Math.min(
-        CONFIG.canvas.width - this.width,
-        this.x
-      )
-    );
+    this.clamp();
   }
 
   moveTo(x) {
     this.x = x - this.width / 2;
 
+    this.clamp();
+  }
+
+  expand() {
+    this.width = 210;
+    this.clamp();
+  }
+
+  normal() {
+    this.width = this.normalWidth;
+    this.clamp();
+  }
+
+  clamp() {
     this.x = Math.max(
       0,
       Math.min(
-        CONFIG.canvas.width - this.width,
+        this.canvasWidth - this.width,
         this.x
       )
     );

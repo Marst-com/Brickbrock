@@ -15,12 +15,10 @@ export class Game {
 
     this.ui = ui;
 
-    // 시스템
     this.renderer = new Renderer(this.ctx);
     this.input = new Input(canvas);
     this.audio = new AudioManager();
 
-    // 게임 객체
     this.paddle = new Paddle(
       CONFIG.canvas.width,
       CONFIG.paddle.width,
@@ -33,7 +31,6 @@ export class Game {
     this.powerUps = [];
     this.particles = [];
 
-    // 게임 상태
     this.score = 0;
     this.lives = CONFIG.lives;
     this.level = 1;
@@ -41,16 +38,14 @@ export class Game {
     this.running = false;
     this.paused = false;
 
-    this.lastTime = 0;
+    // 부활 카운트다운
+    this.respawning = false;
+    this.respawnTime = 0;
 
     this.createLevel();
     this.resetBalls();
     this.updateUI();
   }
-
-  // =========================
-  // LEVEL
-  // =========================
 
   createLevel() {
     this.bricks = [];
@@ -81,17 +76,29 @@ export class Game {
           top +
           row * (height + gap);
 
-        let type = "normal";
+        /*
+          1스테이지 기준
 
-        // 기본 HP
-        let hp =
-          Math.min(
-            1 +
-              Math.floor(
-                (row + this.level - 1) / 2
-              ),
-            3
-          );
+          맨 위    → HP 1
+          2번째    → HP 1
+          3번째    → HP 2
+          4번째    → HP 2
+          5번째    → HP 3
+          맨 아래  → HP 3
+
+          스테이지가 올라가면
+          전체적으로 조금씩 강해짐.
+        */
+
+        const hp = Math.min(
+          1 +
+            Math.floor(
+              (row + this.level - 1) / 2
+            ),
+          3
+        );
+
+        let type = "normal";
 
         // 폭탄 벽돌
         if (
@@ -99,7 +106,6 @@ export class Game {
           Math.random() < 0.12
         ) {
           type = "bomb";
-          hp = 1;
         }
 
         this.bricks.push(
@@ -109,63 +115,60 @@ export class Game {
             width,
             height,
             type,
-            hp
+            type === "bomb" ? 1 : hp
           )
         );
       }
     }
   }
 
-  // =========================
-  // GAME START
-  // =========================
-
-start() {
-  // 오디오 오류가 게임 시작을 막지 않도록 함
-  try {
-    this.audio.init();
-  } catch (error) {
-    console.warn(
-      "오디오 초기화 실패:",
-      error
-    );
-  }
-
-  if (this.running) {
-    if (this.paused) {
-      this.paused = false;
-      this.ui.message.textContent =
-        "▶ 게임 진행 중";
+  start() {
+    try {
+      this.audio.init();
+    } catch (error) {
+      console.warn(
+        "오디오 초기화 실패:",
+        error
+      );
     }
 
-    return;
+    if (this.running) {
+      if (this.paused) {
+        this.paused = false;
+        this.ui.message.textContent =
+          "▶ 게임 진행 중";
+      }
+
+      return;
+    }
+
+    this.running = true;
+    this.paused = false;
+
+    if (this.balls.length === 0) {
+      this.resetBalls();
+    }
+
+    this.ui.message.textContent =
+      "게임 시작!";
+
+    this.loop();
   }
-
-  this.running = true;
-  this.paused = false;
-
-  if (this.balls.length === 0) {
-    this.resetBalls();
-  }
-
-  this.ui.message.textContent =
-    "게임 시작!";
-
-  this.loop();
-}
-
-  // =========================
-  // BALL
-  // =========================
 
   resetBalls() {
+    const speed =
+      CONFIG.ball.speed +
+      Math.min(
+        this.level - 1,
+        8
+      ) * 0.35;
+
     this.balls = [
       new Ball(
         CONFIG.canvas.width / 2,
         CONFIG.canvas.height - 70,
         CONFIG.ball.radius,
-        CONFIG.ball.speed +
-          Math.min(this.level - 1, 4) * 0.25
+        speed
       )
     ];
   }
@@ -187,12 +190,12 @@ start() {
 
       clone.dx = -original.dx;
 
-      // 약간 다른 각도로 분리
       clone.dy =
         original.dy +
         (Math.random() - 0.5) * 1.5;
 
-      clone.piercing = original.piercing;
+      clone.piercing =
+        original.piercing;
 
       this.balls.push(clone);
     }
@@ -205,32 +208,26 @@ start() {
     );
   }
 
-  // =========================
-  // PAUSE
-  // =========================
-
   togglePause() {
-    if (!this.running) {
+    if (
+      !this.running ||
+      this.respawning
+    ) {
       return;
     }
 
     this.paused = !this.paused;
 
-    if (this.paused) {
-      this.ui.message.textContent =
-        "⏸ 일시정지";
-    } else {
-      this.ui.message.textContent =
-        "▶ 게임 진행 중";
-    }
+    this.ui.message.textContent =
+      this.paused
+        ? "⏸ 일시정지"
+        : "▶ 게임 진행 중";
   }
 
-  // =========================
-  // RESTART
-  // =========================
-
   restart() {
-    this.audio.init();
+    try {
+      this.audio.init();
+    } catch {}
 
     this.score = 0;
     this.lives = CONFIG.lives;
@@ -238,6 +235,9 @@ start() {
 
     this.running = false;
     this.paused = false;
+
+    this.respawning = false;
+    this.respawnTime = 0;
 
     this.balls = [];
     this.powerUps = [];
@@ -256,12 +256,18 @@ start() {
     this.draw();
   }
 
-  // =========================
-  // UPDATE
-  // =========================
-
   update() {
-    if (!this.running || this.paused) {
+    if (
+      !this.running ||
+      this.paused
+    ) {
+      return;
+    }
+
+    // 부활 카운트다운
+    if (this.respawning) {
+      this.updateRespawn();
+      this.updateParticles();
       return;
     }
 
@@ -271,13 +277,39 @@ start() {
     this.updateParticles();
 
     this.checkLevelClear();
-
     this.updateUI();
   }
 
-  // =========================
-  // PADDLE
-  // =========================
+  updateRespawn() {
+    this.respawnTime -= 1 / 60;
+
+    const seconds = Math.ceil(
+      this.respawnTime
+    );
+
+    if (seconds > 0) {
+      this.ui.message.textContent =
+        `💔 부활까지 ${seconds}초...`;
+    }
+
+    if (this.respawnTime <= 0) {
+      this.respawning = false;
+
+      this.resetBalls();
+      this.paddle.reset();
+
+      this.ui.message.textContent =
+        "🔥 부활!";
+
+      this.createParticles(
+        this.paddle.x +
+          this.paddle.width / 2,
+        this.paddle.y,
+        "#22c55e",
+        25
+      );
+    }
+  }
 
   updatePaddle() {
     if (this.input.left) {
@@ -294,10 +326,6 @@ start() {
       );
     }
   }
-
-  // =========================
-  // BALLS
-  // =========================
 
   updateBalls() {
     for (const ball of this.balls) {
@@ -327,18 +355,12 @@ start() {
         ball => ball.alive
       );
 
-    // 공이 전부 사라짐
     if (this.balls.length === 0) {
       this.loseLife();
     }
   }
 
-  // =========================
-  // WALL COLLISION
-  // =========================
-
   handleWalls(ball) {
-    // 왼쪽 / 오른쪽 벽
     if (
       ball.x - ball.radius <= 0
     ) {
@@ -359,7 +381,6 @@ start() {
       this.audio.wall();
     }
 
-    // 위쪽 벽
     if (
       ball.y - ball.radius <= 0
     ) {
@@ -368,7 +389,6 @@ start() {
       this.audio.wall();
     }
 
-    // 아래로 떨어짐
     if (
       ball.y - ball.radius >
       CONFIG.canvas.height
@@ -376,10 +396,6 @@ start() {
       ball.alive = false;
     }
   }
-
-  // =========================
-  // PADDLE COLLISION
-  // =========================
 
   handlePaddle(ball) {
     const hit =
@@ -399,8 +415,6 @@ start() {
       return;
     }
 
-    // 공을 패들 위로 이동시켜
-    // 한 프레임에 여러 번 충돌하는 것을 방지
     ball.y =
       this.paddle.y -
       ball.radius;
@@ -413,7 +427,6 @@ start() {
       (ball.x - center) /
       (this.paddle.width / 2);
 
-    // 너무 수직으로 가지 않도록 제한
     const limitedOffset =
       Math.max(
         -0.92,
@@ -437,18 +450,16 @@ start() {
 
     this.audio.paddle();
 
-    // 살짝 빨라짐
-    if (ball.speed < CONFIG.ball.maxSpeed) {
+    if (
+      ball.speed <
+      CONFIG.ball.maxSpeed
+    ) {
       ball.speed = Math.min(
         ball.speed + 0.03,
         CONFIG.ball.maxSpeed
       );
     }
   }
-
-  // =========================
-  // BRICK COLLISION
-  // =========================
 
   handleBricks(ball) {
     for (const brick of this.bricks) {
@@ -472,7 +483,6 @@ start() {
         continue;
       }
 
-      // 일반 공이면 튕김
       if (!ball.piercing) {
         this.resolveBrickBounce(
           ball,
@@ -484,52 +494,26 @@ start() {
         brick.hit();
 
       if (destroyed) {
-        this.destroyBrick(
-          brick
-        );
+        this.destroyBrick(brick);
       } else {
         this.score += 25;
-
         this.audio.brick();
       }
 
-      // 한 프레임에 공이 여러 벽돌을
-      // 이상하게 관통하지 않도록 종료
       if (!ball.piercing) {
         break;
       }
     }
   }
 
-  // =========================
-  // BRICK BOUNCE
-  // =========================
-
-  resolveBrickBounce(
-    ball,
-    brick
-  ) {
-    const ballCenterX =
-      ball.x;
-
-    const ballCenterY =
-      ball.y;
-
-    const brickCenterX =
-      brick.x +
-      brick.width / 2;
-
-    const brickCenterY =
-      brick.y +
-      brick.height / 2;
-
+  resolveBrickBounce(ball, brick) {
     const dx =
-      ballCenterX -
-      brickCenterX;
+      ball.x -
+      (brick.x + brick.width / 2);
 
     const dy =
-      ballCenterY -
-      brickCenterY;
+      ball.y -
+      (brick.y + brick.height / 2);
 
     const overlapX =
       brick.width / 2 +
@@ -541,40 +525,28 @@ start() {
       ball.radius -
       Math.abs(dy);
 
-    if (
-      overlapX < overlapY
-    ) {
+    if (overlapX < overlapY) {
       ball.bounceX();
 
-      if (dx > 0) {
-        ball.x =
-          brick.x +
-          brick.width +
-          ball.radius;
-      } else {
-        ball.x =
-          brick.x -
-          ball.radius;
-      }
+      ball.x =
+        dx > 0
+          ? brick.x +
+            brick.width +
+            ball.radius
+          : brick.x -
+            ball.radius;
     } else {
       ball.bounceY();
 
-      if (dy > 0) {
-        ball.y =
-          brick.y +
-          brick.height +
-          ball.radius;
-      } else {
-        ball.y =
-          brick.y -
-          ball.radius;
-      }
+      ball.y =
+        dy > 0
+          ? brick.y +
+            brick.height +
+            ball.radius
+          : brick.y -
+            ball.radius;
     }
   }
-
-  // =========================
-  // DESTROY BRICK
-  // =========================
 
   destroyBrick(brick) {
     brick.destroyed = true;
@@ -589,28 +561,22 @@ start() {
       brick.y +
         brick.height / 2,
       brick.getColor(),
-      15
+      18
     );
 
-    // 폭탄
-    if (
-      brick.type === "bomb"
-    ) {
+    if (brick.type === "bomb") {
       this.audio.bomb();
       this.explode(brick);
     }
 
-    // 파워업 생성
+    // 기존 28% → 45%
     if (
-      Math.random() < 0.28
+      Math.random() <
+      CONFIG.brick.dropRate
     ) {
       this.spawnPowerUp(brick);
     }
   }
-
-  // =========================
-  // BOMB
-  // =========================
 
   explode(source) {
     const radius = 115;
@@ -675,10 +641,6 @@ start() {
     }
   }
 
-  // =========================
-  // POWER UPS
-  // =========================
-
   spawnPowerUp(brick) {
     const types = [
       "duplicate",
@@ -717,9 +679,7 @@ start() {
 
       if (
         powerUp.active &&
-        this.collidesPowerUp(
-          powerUp
-        )
+        this.collidesPowerUp(powerUp)
       ) {
         this.activatePowerUp(
           powerUp
@@ -763,9 +723,7 @@ start() {
       18
     );
 
-    switch (
-      powerUp.type
-    ) {
+    switch (powerUp.type) {
       case "duplicate":
         this.duplicateBalls();
         this.audio.duplicate();
@@ -782,9 +740,7 @@ start() {
         break;
 
       case "fast":
-        for (
-          const ball of this.balls
-        ) {
+        for (const ball of this.balls) {
           ball.setSpeed(1.5);
         }
 
@@ -792,9 +748,7 @@ start() {
         break;
 
       case "slow":
-        for (
-          const ball of this.balls
-        ) {
+        for (const ball of this.balls) {
           ball.setSpeed(0.7);
         }
 
@@ -803,17 +757,12 @@ start() {
 
       case "life":
         this.lives++;
-
         this.audio.life();
         break;
     }
 
     this.score += 50;
   }
-
-  // =========================
-  // LIFE
-  // =========================
 
   loseLife() {
     this.lives--;
@@ -823,6 +772,7 @@ start() {
 
       this.running = false;
       this.paused = false;
+      this.respawning = false;
 
       this.ui.message.textContent =
         `GAME OVER — 점수 ${this.score}`;
@@ -834,20 +784,21 @@ start() {
 
     this.audio.loseLife();
 
+    this.balls = [];
+
     this.paddle.normal();
     this.paddle.reset();
 
-    this.resetBalls();
+    // 3초 대기
+    this.respawning = true;
+    this.respawnTime =
+      CONFIG.respawn.countdown;
 
     this.ui.message.textContent =
-      `💔 목숨 감소! 남은 목숨: ${this.lives}`;
+      `💔 부활까지 ${CONFIG.respawn.countdown}초...`;
 
     this.updateUI();
   }
-
-  // =========================
-  // LEVEL CLEAR
-  // =========================
 
   checkLevelClear() {
     const remaining =
@@ -856,11 +807,9 @@ start() {
           !brick.destroyed
       );
 
-    if (remaining) {
-      return;
+    if (!remaining) {
+      this.nextLevel();
     }
-
-    this.nextLevel();
   }
 
   nextLevel() {
@@ -884,10 +833,6 @@ start() {
     this.updateUI();
   }
 
-  // =========================
-  // PARTICLES
-  // =========================
-
   createParticles(
     x,
     y,
@@ -910,10 +855,7 @@ start() {
   }
 
   updateParticles() {
-    for (
-      const particle of
-      this.particles
-    ) {
+    for (const particle of this.particles) {
       particle.update();
     }
 
@@ -923,10 +865,6 @@ start() {
           !particle.dead
       );
   }
-
-  // =========================
-  // UI
-  // =========================
 
   updateUI() {
     this.ui.score.textContent =
@@ -939,10 +877,6 @@ start() {
       this.level;
   }
 
-  // =========================
-  // DRAW
-  // =========================
-
   draw() {
     this.renderer.clear(
       CONFIG.canvas.width,
@@ -954,67 +888,45 @@ start() {
       CONFIG.canvas.height
     );
 
-    // 벽돌
-    for (
-      const brick of this.bricks
-    ) {
+    for (const brick of this.bricks) {
       if (!brick.destroyed) {
-        this.renderer.brick(
-          brick
-        );
+        this.renderer.brick(brick);
       }
     }
 
-    // 파워업
-    for (
-      const powerUp of
-      this.powerUps
-    ) {
-      this.renderer.powerUp(
-        powerUp
-      );
+    for (const powerUp of this.powerUps) {
+      this.renderer.powerUp(powerUp);
     }
 
-    // 패들
-    this.renderer.paddle(
-      this.paddle
-    );
+    this.renderer.paddle(this.paddle);
 
-    // 공
-    for (
-      const ball of this.balls
-    ) {
-      this.renderer.ball(
-        ball
-      );
+    for (const ball of this.balls) {
+      this.renderer.ball(ball);
     }
 
-    // 파티클
-    for (
-      const particle of
-      this.particles
-    ) {
-      this.renderer.particle(
-        particle
+    for (const particle of this.particles) {
+      this.renderer.particle(particle);
+    }
+
+    // 부활 카운트다운을 게임 화면에도 표시
+    if (this.respawning) {
+      this.renderer.countdown(
+        Math.ceil(this.respawnTime)
       );
     }
   }
 
-  // =========================
-  // GAME LOOP
-  // =========================
+  loop(timestamp = 0) {
+    if (!this.running) {
+      this.draw();
+      return;
+    }
 
-
-loop(timestamp = 0) {
-  if (!this.running) {
+    this.update();
     this.draw();
-    return;
+
+    requestAnimationFrame(
+      time => this.loop(time)
+    );
   }
-
-  this.update();
-  this.draw();
-
-  requestAnimationFrame(
-    time => this.loop(time)
-  );
 }

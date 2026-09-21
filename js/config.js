@@ -7,25 +7,34 @@ export const CONFIG = {
   paddle: {
     width: 130,
     height: 14,
-    speed: 8
+    speed: 8,
+    expandedWidth: 210
   },
 
   ball: {
     radius: 8,
-    speed: 5
+    speed: 5,
+    maxSpeed: 9
   },
 
-  bricks: {
+  brick: {
     rows: 6,
-    columns: 10,
+    cols: 10,
     width: 80,
     height: 24,
     gap: 7,
-    top: 50
+    top: 55,
+    hpColors: {
+      1: "#38bdf8",
+      2: "#a78bfa",
+      3: "#fb923c"
+    }
   },
 
-  game: {
-    lives: 3,
-    maxLevel: 5
-  }
+  powerUp: {
+    size: 18,
+    speed: 3
+  },
+
+  lives: 3
 };

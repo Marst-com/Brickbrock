@@ -1,59 +1,48 @@
 import { CONFIG } from "./config.js";
 import { Game } from "./Game.js";
 
-const canvas =
-  document.querySelector("#game");
+const canvas = document.getElementById("game");
 
-canvas.width =
-  CONFIG.canvas.width;
+const score = document.getElementById("score");
+const lives = document.getElementById("lives");
+const level = document.getElementById("level");
 
-canvas.height =
-  CONFIG.canvas.height;
+const startButton = document.getElementById("start");
+const pauseButton = document.getElementById("pause");
+const restartButton = document.getElementById("restart");
+
+const message = document.getElementById("message");
+
+if (!canvas) {
+  throw new Error("Canvas #game을 찾을 수 없습니다.");
+}
+
+canvas.width = CONFIG.canvas.width;
+canvas.height = CONFIG.canvas.height;
 
 const ui = {
-  score:
-    document.querySelector("#score"),
-
-  lives:
-    document.querySelector("#lives"),
-
-  level:
-    document.querySelector("#level"),
-
-  message(text) {
-    document.querySelector("#message")
-      .textContent = text;
-  },
-
-  update(score, lives, level) {
-    this.score.textContent = score;
-    this.lives.textContent = lives;
-    this.level.textContent = level;
-  }
+  score,
+  lives,
+  level,
+  message
 };
 
-const game =
-  new Game(canvas, ui);
+const game = new Game(canvas, ui);
 
-document
-  .querySelector("#start")
-  .addEventListener(
-    "click",
-    () => game.start()
-  );
+// 시작
+startButton?.addEventListener("click", () => {
+  game.start();
+});
 
-document
-  .querySelector("#pause")
-  .addEventListener(
-    "click",
-    () => game.togglePause()
-  );
+// 일시정지
+pauseButton?.addEventListener("click", () => {
+  game.togglePause();
+});
 
-document
-  .querySelector("#restart")
-  .addEventListener(
-    "click",
-    () => game.restart()
-  );
+// 재시작
+restartButton?.addEventListener("click", () => {
+  game.restart();
+});
 
-game.loop();
+// 초기 화면
+game.draw();

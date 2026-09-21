@@ -6,6 +6,7 @@ import { PowerUp } from "./PowerUp.js";
 import { Particle } from "./Particle.js";
 import { Renderer } from "./Renderer.js";
 import { Input } from "./Input.js";
+import { AudioManager } from "./Audio.js";
 
 export class Game {
   constructor(canvas, ui) {
@@ -14,9 +15,12 @@ export class Game {
 
     this.ui = ui;
 
+    // 시스템
     this.renderer = new Renderer(this.ctx);
     this.input = new Input(canvas);
+    this.audio = new AudioManager();
 
+    // 게임 객체
     this.paddle = new Paddle(
       CONFIG.canvas.width,
       CONFIG.paddle.width,
@@ -25,11 +29,11 @@ export class Game {
     );
 
     this.balls = [];
-
     this.bricks = [];
     this.powerUps = [];
     this.particles = [];
 
+    // 게임 상태
     this.score = 0;
     this.lives = CONFIG.lives;
     this.level = 1;
@@ -37,9 +41,16 @@ export class Game {
     this.running = false;
     this.paused = false;
 
+    this.lastTime = 0;
+
     this.createLevel();
+    this.resetBalls();
     this.updateUI();
   }
+
+  // =========================
+  // LEVEL
+  // =========================
 
   createLevel() {
     this.bricks = [];
@@ -71,11 +82,20 @@ export class Game {
           row * (height + gap);
 
         let type = "normal";
-        let hp = Math.min(row + 1, 3);
 
-        // 폭탄
+        // 기본 HP
+        let hp =
+          Math.min(
+            1 +
+              Math.floor(
+                (row + this.level - 1) / 2
+              ),
+            3
+          );
+
+        // 폭탄 벽돌
         if (
-          row > 0 &&
+          row >= 1 &&
           Math.random() < 0.12
         ) {
           type = "bomb";
@@ -96,11 +116,23 @@ export class Game {
     }
   }
 
+  // =========================
+  // GAME START
+  // =========================
+
   start() {
+    this.audio.init();
+
+    if (this.running && !this.paused) {
+      return;
+    }
+
     this.running = true;
     this.paused = false;
 
-    this.resetBalls();
+    if (this.balls.length === 0) {
+      this.resetBalls();
+    }
 
     this.ui.message.textContent =
       "게임 시작!";
@@ -108,51 +140,132 @@ export class Game {
     this.loop();
   }
 
+  // =========================
+  // BALL
+  // =========================
+
   resetBalls() {
     this.balls = [
       new Ball(
         CONFIG.canvas.width / 2,
-        430,
+        CONFIG.canvas.height - 70,
         CONFIG.ball.radius,
-        CONFIG.ball.speed
+        CONFIG.ball.speed +
+          Math.min(this.level - 1, 4) * 0.25
       )
     ];
   }
 
+  duplicateBalls() {
+    const originals = [...this.balls];
+
+    for (const original of originals) {
+      if (this.balls.length >= 5) {
+        break;
+      }
+
+      const clone = new Ball(
+        original.x,
+        original.y,
+        original.radius,
+        original.speed
+      );
+
+      clone.dx = -original.dx;
+
+      // 약간 다른 각도로 분리
+      clone.dy =
+        original.dy +
+        (Math.random() - 0.5) * 1.5;
+
+      clone.piercing = original.piercing;
+
+      this.balls.push(clone);
+    }
+
+    this.createParticles(
+      CONFIG.canvas.width / 2,
+      CONFIG.canvas.height / 2,
+      "#22d3ee",
+      25
+    );
+  }
+
+  // =========================
+  // PAUSE
+  // =========================
+
   togglePause() {
-    if (!this.running) return;
+    if (!this.running) {
+      return;
+    }
 
     this.paused = !this.paused;
 
-    this.ui.message.textContent =
-      this.paused
-        ? "⏸ 일시정지"
-        : "▶ 진행 중";
+    if (this.paused) {
+      this.ui.message.textContent =
+        "⏸ 일시정지";
+    } else {
+      this.ui.message.textContent =
+        "▶ 게임 진행 중";
+    }
   }
 
+  // =========================
+  // RESTART
+  // =========================
+
   restart() {
+    this.audio.init();
+
     this.score = 0;
     this.lives = CONFIG.lives;
     this.level = 1;
 
+    this.running = false;
+    this.paused = false;
+
+    this.balls = [];
     this.powerUps = [];
     this.particles = [];
 
     this.paddle.normal();
+    this.paddle.reset();
 
     this.createLevel();
     this.resetBalls();
 
-    this.running = false;
-    this.paused = false;
+    this.ui.message.textContent =
+      "시작 버튼을 눌러 출발!";
+
+    this.updateUI();
+    this.draw();
+  }
+
+  // =========================
+  // UPDATE
+  // =========================
+
+  update() {
+    if (!this.running || this.paused) {
+      return;
+    }
+
+    this.updatePaddle();
+    this.updateBalls();
+    this.updatePowerUps();
+    this.updateParticles();
+
+    this.checkLevelClear();
 
     this.updateUI();
   }
 
-  update() {
-    if (!this.running || this.paused) return;
+  // =========================
+  // PADDLE
+  // =========================
 
-    // 패들
+  updatePaddle() {
     if (this.input.left) {
       this.paddle.move(-1);
     }
@@ -162,94 +275,121 @@ export class Game {
     }
 
     if (this.input.pointerActive) {
-      this.paddle.moveTo(this.input.pointerX);
+      this.paddle.moveTo(
+        this.input.pointerX
+      );
     }
+  }
 
-    // 공
+  // =========================
+  // BALLS
+  // =========================
+
+  updateBalls() {
     for (const ball of this.balls) {
+      if (!ball.alive) {
+        continue;
+      }
+
       ball.update();
 
       this.handleWalls(ball);
+
+      if (!ball.alive) {
+        continue;
+      }
+
       this.handlePaddle(ball);
+
+      if (!ball.alive) {
+        continue;
+      }
+
       this.handleBricks(ball);
     }
 
-    // 공 제거
     this.balls =
-      this.balls.filter(ball => ball.alive);
+      this.balls.filter(
+        ball => ball.alive
+      );
 
+    // 공이 전부 사라짐
     if (this.balls.length === 0) {
       this.loseLife();
     }
-
-    // 파워업
-    for (const powerUp of this.powerUps) {
-      powerUp.update();
-
-      if (
-        powerUp.active &&
-        this.collidesPowerUp(powerUp)
-      ) {
-        this.activatePowerUp(powerUp);
-        powerUp.active = false;
-      }
-    }
-
-    this.powerUps =
-      this.powerUps.filter(p => p.active);
-
-    // 파티클
-    for (const particle of this.particles) {
-      particle.update();
-    }
-
-    this.particles =
-      this.particles.filter(
-        p => !p.dead
-      );
-
-    // 다음 스테이지
-    if (
-      this.bricks.every(
-        brick => brick.destroyed
-      )
-    ) {
-      this.nextLevel();
-    }
-
-    this.updateUI();
   }
 
+  // =========================
+  // WALL COLLISION
+  // =========================
+
   handleWalls(ball) {
+    // 왼쪽 / 오른쪽 벽
     if (
-      ball.x - ball.radius <= 0 ||
-      ball.x + ball.radius >= CONFIG.canvas.width
+      ball.x - ball.radius <= 0
     ) {
+      ball.x = ball.radius;
       ball.bounceX();
-    }
-
-    if (ball.y - ball.radius <= 0) {
-      ball.bounceY();
+      this.audio.wall();
     }
 
     if (
-      ball.y > CONFIG.canvas.height + 30
+      ball.x + ball.radius >=
+      CONFIG.canvas.width
+    ) {
+      ball.x =
+        CONFIG.canvas.width -
+        ball.radius;
+
+      ball.bounceX();
+      this.audio.wall();
+    }
+
+    // 위쪽 벽
+    if (
+      ball.y - ball.radius <= 0
+    ) {
+      ball.y = ball.radius;
+      ball.bounceY();
+      this.audio.wall();
+    }
+
+    // 아래로 떨어짐
+    if (
+      ball.y - ball.radius >
+      CONFIG.canvas.height
     ) {
       ball.alive = false;
     }
   }
 
+  // =========================
+  // PADDLE COLLISION
+  // =========================
+
   handlePaddle(ball) {
     const hit =
-      ball.x > this.paddle.x &&
-      ball.x <
-        this.paddle.x + this.paddle.width &&
-      ball.y + ball.radius >= this.paddle.y &&
+      ball.x + ball.radius >
+        this.paddle.x &&
+      ball.x - ball.radius <
+        this.paddle.x +
+          this.paddle.width &&
+      ball.y + ball.radius >=
+        this.paddle.y &&
       ball.y - ball.radius <=
-        this.paddle.y + this.paddle.height &&
+        this.paddle.y +
+          this.paddle.height &&
       ball.dy > 0;
 
-    if (!hit) return;
+    if (!hit) {
+      return;
+    }
+
+    // 공을 패들 위로 이동시켜
+    // 한 프레임에 여러 번 충돌하는 것을 방지
+    ball.y =
+      this.paddle.y -
+      ball.radius;
 
     const center =
       this.paddle.x +
@@ -259,90 +399,271 @@ export class Game {
       (ball.x - center) /
       (this.paddle.width / 2);
 
-    ball.dy = -Math.abs(ball.dy);
-    ball.dx = offset * ball.speed;
+    // 너무 수직으로 가지 않도록 제한
+    const limitedOffset =
+      Math.max(
+        -0.92,
+        Math.min(0.92, offset)
+      );
+
+    const speed =
+      Math.sqrt(
+        ball.dx * ball.dx +
+        ball.dy * ball.dy
+      );
+
+    ball.dx =
+      limitedOffset * speed;
+
+    ball.dy =
+      -Math.sqrt(
+        speed * speed -
+        ball.dx * ball.dx
+      );
+
+    this.audio.paddle();
+
+    // 살짝 빨라짐
+    if (ball.speed < CONFIG.ball.maxSpeed) {
+      ball.speed = Math.min(
+        ball.speed + 0.03,
+        CONFIG.ball.maxSpeed
+      );
+    }
   }
+
+  // =========================
+  // BRICK COLLISION
+  // =========================
 
   handleBricks(ball) {
     for (const brick of this.bricks) {
-      if (brick.destroyed) continue;
-
-      const hit =
-        ball.x + ball.radius > brick.x &&
-        ball.x - ball.radius <
-          brick.x + brick.width &&
-        ball.y + ball.radius > brick.y &&
-        ball.y - ball.radius <
-          brick.y + brick.height;
-
-      if (!hit) continue;
-
-      if (!ball.piercing) {
-        ball.bounceY();
-      }
-
-      const destroyed = brick.hit();
-
-      if (destroyed) {
-        this.score += 100;
-
-        this.createParticles(
-          brick.x + brick.width / 2,
-          brick.y + brick.height / 2,
-          brick.getColor()
-        );
-
-        // 폭탄
-        if (brick.type === "bomb") {
-          this.explode(brick);
-        }
-
-        // 25% 확률 파워업
-        if (Math.random() < 0.25) {
-          this.spawnPowerUp(brick);
-        }
-      } else {
-        this.score += 25;
-      }
-
-      break;
-    }
-  }
-
-  explode(source) {
-    for (const brick of this.bricks) {
-      if (brick.destroyed || brick === source) {
+      if (brick.destroyed) {
         continue;
       }
 
+      const hit =
+        ball.x + ball.radius >
+          brick.x &&
+        ball.x - ball.radius <
+          brick.x +
+            brick.width &&
+        ball.y + ball.radius >
+          brick.y &&
+        ball.y - ball.radius <
+          brick.y +
+            brick.height;
+
+      if (!hit) {
+        continue;
+      }
+
+      // 일반 공이면 튕김
+      if (!ball.piercing) {
+        this.resolveBrickBounce(
+          ball,
+          brick
+        );
+      }
+
+      const destroyed =
+        brick.hit();
+
+      if (destroyed) {
+        this.destroyBrick(
+          brick
+        );
+      } else {
+        this.score += 25;
+
+        this.audio.brick();
+      }
+
+      // 한 프레임에 공이 여러 벽돌을
+      // 이상하게 관통하지 않도록 종료
+      if (!ball.piercing) {
+        break;
+      }
+    }
+  }
+
+  // =========================
+  // BRICK BOUNCE
+  // =========================
+
+  resolveBrickBounce(
+    ball,
+    brick
+  ) {
+    const ballCenterX =
+      ball.x;
+
+    const ballCenterY =
+      ball.y;
+
+    const brickCenterX =
+      brick.x +
+      brick.width / 2;
+
+    const brickCenterY =
+      brick.y +
+      brick.height / 2;
+
+    const dx =
+      ballCenterX -
+      brickCenterX;
+
+    const dy =
+      ballCenterY -
+      brickCenterY;
+
+    const overlapX =
+      brick.width / 2 +
+      ball.radius -
+      Math.abs(dx);
+
+    const overlapY =
+      brick.height / 2 +
+      ball.radius -
+      Math.abs(dy);
+
+    if (
+      overlapX < overlapY
+    ) {
+      ball.bounceX();
+
+      if (dx > 0) {
+        ball.x =
+          brick.x +
+          brick.width +
+          ball.radius;
+      } else {
+        ball.x =
+          brick.x -
+          ball.radius;
+      }
+    } else {
+      ball.bounceY();
+
+      if (dy > 0) {
+        ball.y =
+          brick.y +
+          brick.height +
+          ball.radius;
+      } else {
+        ball.y =
+          brick.y -
+          ball.radius;
+      }
+    }
+  }
+
+  // =========================
+  // DESTROY BRICK
+  // =========================
+
+  destroyBrick(brick) {
+    brick.destroyed = true;
+
+    this.score += 100;
+
+    this.audio.brickBreak();
+
+    this.createParticles(
+      brick.x +
+        brick.width / 2,
+      brick.y +
+        brick.height / 2,
+      brick.getColor(),
+      15
+    );
+
+    // 폭탄
+    if (
+      brick.type === "bomb"
+    ) {
+      this.audio.bomb();
+      this.explode(brick);
+    }
+
+    // 파워업 생성
+    if (
+      Math.random() < 0.28
+    ) {
+      this.spawnPowerUp(brick);
+    }
+  }
+
+  // =========================
+  // BOMB
+  // =========================
+
+  explode(source) {
+    const radius = 115;
+
+    this.createParticles(
+      source.x +
+        source.width / 2,
+      source.y +
+        source.height / 2,
+      "#ef4444",
+      45
+    );
+
+    for (const brick of this.bricks) {
+      if (
+        brick === source ||
+        brick.destroyed
+      ) {
+        continue;
+      }
+
+      const sourceX =
+        source.x +
+        source.width / 2;
+
+      const sourceY =
+        source.y +
+        source.height / 2;
+
+      const brickX =
+        brick.x +
+        brick.width / 2;
+
+      const brickY =
+        brick.y +
+        brick.height / 2;
+
       const dx =
-        brick.x - source.x;
+        brickX - sourceX;
 
       const dy =
-        brick.y - source.y;
+        brickY - sourceY;
 
       const distance =
-        Math.sqrt(dx * dx + dy * dy);
+        Math.sqrt(
+          dx * dx +
+          dy * dy
+        );
 
-      if (distance < 100) {
+      if (distance <= radius) {
         brick.destroyed = true;
+
         this.score += 100;
 
         this.createParticles(
-          brick.x + brick.width / 2,
-          brick.y + brick.height / 2,
-          brick.getColor()
+          brickX,
+          brickY,
+          brick.getColor(),
+          10
         );
       }
     }
-
-    this.createParticles(
-      source.x + source.width / 2,
-      source.y + source.height / 2,
-      "#ef4444",
-      35
-    );
   }
+
+  // =========================
+  // POWER UPS
+  // =========================
 
   spawnPowerUp(brick) {
     const types = [
@@ -356,17 +677,49 @@ export class Game {
     const type =
       types[
         Math.floor(
-          Math.random() * types.length
+          Math.random() *
+            types.length
         )
       ];
 
     this.powerUps.push(
       new PowerUp(
-        brick.x + brick.width / 2,
-        brick.y + brick.height / 2,
+        brick.x +
+          brick.width / 2,
+        brick.y +
+          brick.height / 2,
         type
       )
     );
+  }
+
+  updatePowerUps() {
+    for (const powerUp of this.powerUps) {
+      if (!powerUp.active) {
+        continue;
+      }
+
+      powerUp.update();
+
+      if (
+        powerUp.active &&
+        this.collidesPowerUp(
+          powerUp
+        )
+      ) {
+        this.activatePowerUp(
+          powerUp
+        );
+
+        powerUp.active = false;
+      }
+    }
+
+    this.powerUps =
+      this.powerUps.filter(
+        powerUp =>
+          powerUp.active
+      );
   }
 
   collidesPowerUp(powerUp) {
@@ -387,13 +740,26 @@ export class Game {
   }
 
   activatePowerUp(powerUp) {
-    switch (powerUp.type) {
+    this.audio.powerUp();
+
+    this.createParticles(
+      powerUp.x,
+      powerUp.y,
+      "#ffffff",
+      18
+    );
+
+    switch (
+      powerUp.type
+    ) {
       case "duplicate":
         this.duplicateBalls();
+        this.audio.duplicate();
         break;
 
       case "expand":
         this.paddle.expand();
+        this.audio.expand();
 
         setTimeout(() => {
           this.paddle.normal();
@@ -402,76 +768,111 @@ export class Game {
         break;
 
       case "fast":
-        for (const ball of this.balls) {
+        for (
+          const ball of this.balls
+        ) {
           ball.setSpeed(1.5);
         }
+
+        this.audio.fast();
         break;
 
       case "slow":
-        for (const ball of this.balls) {
+        for (
+          const ball of this.balls
+        ) {
           ball.setSpeed(0.7);
         }
+
+        this.audio.slow();
         break;
 
       case "life":
         this.lives++;
+
+        this.audio.life();
         break;
     }
 
     this.score += 50;
   }
 
-  duplicateBalls() {
-    const originals = [...this.balls];
-
-    for (const original of originals) {
-      if (this.balls.length >= 5) {
-        break;
-      }
-
-      const clone = new Ball(
-        original.x,
-        original.y,
-        original.radius,
-        original.speed
-      );
-
-      clone.dx = -original.dx;
-      clone.dy = original.dy;
-
-      this.balls.push(clone);
-    }
-  }
+  // =========================
+  // LIFE
+  // =========================
 
   loseLife() {
     this.lives--;
 
     if (this.lives <= 0) {
+      this.audio.gameOver();
+
       this.running = false;
+      this.paused = false;
 
       this.ui.message.textContent =
         `GAME OVER — 점수 ${this.score}`;
 
+      this.updateUI();
+
       return;
     }
+
+    this.audio.loseLife();
+
+    this.paddle.normal();
+    this.paddle.reset();
 
     this.resetBalls();
 
     this.ui.message.textContent =
-      `목숨 감소! 남은 목숨: ${this.lives}`;
+      `💔 목숨 감소! 남은 목숨: ${this.lives}`;
+
+    this.updateUI();
+  }
+
+  // =========================
+  // LEVEL CLEAR
+  // =========================
+
+  checkLevelClear() {
+    const remaining =
+      this.bricks.some(
+        brick =>
+          !brick.destroyed
+      );
+
+    if (remaining) {
+      return;
+    }
+
+    this.nextLevel();
   }
 
   nextLevel() {
     this.level++;
 
+    this.score += 500;
+
+    this.audio.levelUp();
+
+    this.powerUps = [];
+
+    this.paddle.normal();
+    this.paddle.reset();
+
     this.createLevel();
     this.resetBalls();
 
-    this.score += 500;
-
     this.ui.message.textContent =
-      `🎉 LEVEL ${this.level}`;
+      `🎉 STAGE ${this.level}! +500`;
+
+    this.updateUI();
   }
+
+  // =========================
+  // PARTICLES
+  // =========================
 
   createParticles(
     x,
@@ -479,7 +880,11 @@ export class Game {
     color,
     amount = 12
   ) {
-    for (let i = 0; i < amount; i++) {
+    for (
+      let i = 0;
+      i < amount;
+      i++
+    ) {
       this.particles.push(
         new Particle(
           x,
@@ -489,6 +894,25 @@ export class Game {
       );
     }
   }
+
+  updateParticles() {
+    for (
+      const particle of
+      this.particles
+    ) {
+      particle.update();
+    }
+
+    this.particles =
+      this.particles.filter(
+        particle =>
+          !particle.dead
+      );
+  }
+
+  // =========================
+  // UI
+  // =========================
 
   updateUI() {
     this.ui.score.textContent =
@@ -501,6 +925,10 @@ export class Game {
       this.level;
   }
 
+  // =========================
+  // DRAW
+  // =========================
+
   draw() {
     this.renderer.clear(
       CONFIG.canvas.width,
@@ -512,35 +940,63 @@ export class Game {
       CONFIG.canvas.height
     );
 
-    for (const brick of this.bricks) {
+    // 벽돌
+    for (
+      const brick of this.bricks
+    ) {
       if (!brick.destroyed) {
-        this.renderer.brick(brick);
+        this.renderer.brick(
+          brick
+        );
       }
     }
 
-    for (const powerUp of this.powerUps) {
-      this.renderer.powerUp(powerUp);
+    // 파워업
+    for (
+      const powerUp of
+      this.powerUps
+    ) {
+      this.renderer.powerUp(
+        powerUp
+      );
     }
 
+    // 패들
     this.renderer.paddle(
       this.paddle
     );
 
-    for (const ball of this.balls) {
-      this.renderer.ball(ball);
+    // 공
+    for (
+      const ball of this.balls
+    ) {
+      this.renderer.ball(
+        ball
+      );
     }
 
-    for (const particle of this.particles) {
-      this.renderer.particle(particle);
+    // 파티클
+    for (
+      const particle of
+      this.particles
+    ) {
+      this.renderer.particle(
+        particle
+      );
     }
   }
 
-  loop() {
+  // =========================
+  // GAME LOOP
+  // =========================
+
+  loop(timestamp = 0) {
     this.update();
     this.draw();
 
     requestAnimationFrame(
-      () => this.loop()
+      time =>
+        this.loop(time)
     );
   }
 }

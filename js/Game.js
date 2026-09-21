@@ -120,25 +120,39 @@ export class Game {
   // GAME START
   // =========================
 
-  start() {
+start() {
+  // 오디오 오류가 게임 시작을 막지 않도록 함
+  try {
     this.audio.init();
-
-    if (this.running && !this.paused) {
-      return;
-    }
-
-    this.running = true;
-    this.paused = false;
-
-    if (this.balls.length === 0) {
-      this.resetBalls();
-    }
-
-    this.ui.message.textContent =
-      "게임 시작!";
-
-    this.loop();
+  } catch (error) {
+    console.warn(
+      "오디오 초기화 실패:",
+      error
+    );
   }
+
+  if (this.running) {
+    if (this.paused) {
+      this.paused = false;
+      this.ui.message.textContent =
+        "▶ 게임 진행 중";
+    }
+
+    return;
+  }
+
+  this.running = true;
+  this.paused = false;
+
+  if (this.balls.length === 0) {
+    this.resetBalls();
+  }
+
+  this.ui.message.textContent =
+    "게임 시작!";
+
+  this.loop();
+}
 
   // =========================
   // BALL

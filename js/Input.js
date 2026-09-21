@@ -1,41 +1,93 @@
 export class Input {
-  constructor(canvas, paddle) {
-    this.keys = new Set();
+  constructor(canvas) {
+    this.left = false;
+    this.right = false;
+
+    this.pointerActive = false;
+    this.pointerX = 0;
 
     window.addEventListener("keydown", e => {
-      this.keys.add(e.key.toLowerCase());
+      const key = e.key.toLowerCase();
+
+      if (
+        key === "arrowleft" ||
+        key === "a"
+      ) {
+        this.left = true;
+      }
+
+      if (
+        key === "arrowright" ||
+        key === "d"
+      ) {
+        this.right = true;
+      }
+
+      // 스페이스로 스크롤 방지
+      if (
+        key === "arrowleft" ||
+        key === "arrowright" ||
+        key === " "
+      ) {
+        e.preventDefault();
+      }
     });
 
     window.addEventListener("keyup", e => {
-      this.keys.delete(e.key.toLowerCase());
+      const key = e.key.toLowerCase();
+
+      if (
+        key === "arrowleft" ||
+        key === "a"
+      ) {
+        this.left = false;
+      }
+
+      if (
+        key === "arrowright" ||
+        key === "d"
+      ) {
+        this.right = false;
+      }
     });
 
-    canvas.addEventListener("pointermove", e => {
-      const rect = canvas.getBoundingClientRect();
+    const updatePointer = e => {
+      const rect =
+        canvas.getBoundingClientRect();
 
       const x =
-        ((e.clientX - rect.left) / rect.width)
-        * canvas.width;
+        ((e.clientX - rect.left) / rect.width) *
+        canvas.width;
 
-      paddle.moveTo(x);
-    });
+      this.pointerX = x;
+      this.pointerActive = true;
+    };
+
+    canvas.addEventListener(
+      "pointermove",
+      updatePointer
+    );
+
+    canvas.addEventListener(
+      "pointerdown",
+      e => {
+        this.pointerActive = true;
+        updatePointer(e);
+      }
+    );
+
+    canvas.addEventListener(
+      "pointerleave",
+      () => {
+        this.pointerActive = false;
+      }
+    );
+
+    canvas.addEventListener(
+      "pointercancel",
+      () => {
+        this.pointerActive = false;
+      }
+    );
   }
-
-  getDirection() {
-    if (
-      this.keys.has("arrowleft") ||
-      this.keys.has("a")
-    ) {
-      return -1;
-    }
-
-    if (
-      this.keys.has("arrowright") ||
-      this.keys.has("d")
-    ) {
-      return 1;
-    }
-
-    return 0;
-  }
-  }
+}
